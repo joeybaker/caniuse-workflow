@@ -104,128 +104,161 @@
 				<key>runningsubtext</key>
 				<string></string>
 				<key>script</key>
-				<string>ObjC.import("Foundation");
-const dataURL='https://raw.githubusercontent.com/Fyrd/caniuse/main/fulldata-json/data-2.0.json';
+				<string>
+          ObjC.import("Foundation");
+const dataURL =
+  "https://raw.githubusercontent.com/Fyrd/caniuse/main/fulldata-json/data-2.0.json";
 
 function findMatches(query, data) {
   const lcQuery = query.toLowerCase();
-  return data.filter(d =&gt; {
-    console.log('${lcQuery}: ${d.title}/${d.name)/[${d.keywords}]')
-    return d.title.toLowerCase().includes(lcQuery) || 
-    d.name.toLowerCase().includes(lcQuery)  ||
-    d.keywords.toLowerCase().includes(lcQuery) ;
+  // console.log(query, data);
+  return data.filter((d) =&gt;gt; {
+    // console.log(`${lcQuery}: ${d.title}/${d.name}/[${d.keywords}]`);
+    return (
+      d.title.toLowerCase().includes(lcQuery) ||
+      d.name.toLowerCase().includes(lcQuery) ||
+      d.keywords.toLowerCase().includes(lcQuery)
+    );
   });
 } /* findMatches() */
 
 function getBrowserVersion(stats, title, browser) {
   let version = 0;
-  let retval = '';
-  
-  for (const v of Object.keys(stats).sort((a,b) =&gt; Number(a) - Number(b))) {
+  let retval = "";
+
+  for (const v of Object.keys(stats).sort((a, b) =&gt;gt; Number(a) - Number(b))) {
     const numVersion = Number(v);
     const support = stats[v];
-  //  if (title.indexOf('WOFF 2')&gt; -1) console.log(`${browser}: ${numVersion} ${support}`);
-    if (numVersion &gt; version) {
-      if (support === 'y') {
+    //  if (title.indexOf('WOFF 2')&gt;gt; -1) console.log(`${browser}: ${numVersion} ${support}`);
+    if (numVersion &gt;gt; version) {
+      if (support === "y") {
         retval = `${v}+`;
         break;
       }
-      if (support.indexOf('y x') &gt; -1) {
+      if (support.indexOf("y x") &gt;gt; -1) {
         version = numVersion;
         retval = `${v}-px-`;
-      } else if (support.indexOf('a') &gt; -1) {
+      } else if (support.indexOf("a") &gt;gt; -1) {
         version = numVersion;
         retval = `${v}!pa.`;
-      } else if (support.indexOf('p') &gt; -1) {
+      } else if (support.indexOf("p") &gt;gt; -1) {
         version = numVersion;
         retval = `${v}w/pl`;
       }
     }
   }
-//  if (title.indexOf('WOFF 2')&gt; -1) console.log(`Version ${browser} found: ${retval}`);
+  //  if (title.indexOf('WOFF 2')&gt;gt; -1) console.log(`Version ${browser} found: ${retval}`);
   return retval;
 } /* getBrowserVersion */
 
 function run(argv) {
-  const browserMap = {'ie': 'IE',
-    'edge'   : 'E',
-    'firefox': 'FF',
-    'chrome' : 'GC',
-    'safari' : 'S'};
-  
+  const browserMap = {
+    ie: "IE",
+    edge: "E",
+    firefox: "FF",
+    chrome: "GC",
+    safari: "S",
+  };
+
   const query = argv[0];
   if (!query) return;
-  const localCache = 'data.json';
+  const localCache = "data.json";
   const filemanager = $.NSFileManager.defaultManager;
-  const modificationDate = (() =&gt; {
+  const modificationDate = (() =&gt;gt; {
     if (filemanager.fileExistsAtPath($(localCache))) {
       const error = Ref();
-      const dict = filemanager.attributesOfItemAtPathError($(localCache), error);
+      const dict = filemanager.attributesOfItemAtPathError(
+        $(localCache),
+        error
+      );
       return dict.objectForKey($.NSFileModificationDate).js;
     } else {
       return null;
     }
-  })()
+  })();
   //   console.log(modificationDate);
   const milliSecsPerDay = 8.64e7;
-  const cachedValues = (() =&gt; {
+
+  function fetchData() {
+    //  const dataURL = 'https://raw.githubusercontent.com/Fyrd/caniuse/master/data.json';
+    const dataJSON = app.doShellScript(`curl ${dataURL}`);
+    //    console.log(dataJSON.length);
+    const data = JSON.parse(dataJSON).data;
+    const cacheArray = Object.keys(data).map((k) =&gt;gt; {
+      const caniuseData = data[k];
+      //        console.log(Object.keys(caniuseData.stats).filter(b =&gt;gt; browserMap[b]));
+      //      console.log(Object.keys(caniuseData.stats));
+      const stats = {};
+      Object.keys(caniuseData.stats)
+        .filter((browser) =&gt;gt; browserMap[browser])
+        .forEach((browser) =&gt;gt; {
+          const support = getBrowserVersion(
+            caniuseData.stats[browser],
+            caniuseData.title,
+            browser
+          );
+          if (support.trim().length) stats[browserMap[browser]] = support;
+        });
+      return {
+        name: k,
+        title: caniuseData.title,
+        url: `https://caniuse.com/#feat=${k}`,
+        description: caniuseData.description,
+        keywords: caniuseData.keywords,
+        stats: Object.keys(stats)
+          .map((key) =&gt;gt; `${key}: ${stats[key]}`)
+          .join(", "),
+      };
+    });
+    if (cacheArray.length) {
+      /* write cache data */
+      //      console.log(`updating cache data @ ${Path(localCache)}`);
+      const file = app.openForAccess(Path(localCache), {
+        writePermission: true,
+      });
+      app.write(JSON.stringify(cacheArray), { to: file });
+      app.closeAccess(file);
+    }
+    return cacheArray;
+  }
+
+  const cachedValues = (() =&gt;gt; {
     const app = Application.currentApplication();
     app.includeStandardAdditions = true;
-    
-    if (!modificationDate || (Date.now() - modificationDate) &gt;= (milliSecsPerDay * 7)) {
-    //  const dataURL = 'https://raw.githubusercontent.com/Fyrd/caniuse/master/data.json'; 
-      const dataJSON = app.doShellScript(`curl ${dataURL}`);
-  //    console.log(dataJSON.length);
-      const data = JSON.parse(dataJSON).data;
-      const cacheArray = Object.keys(data).map(k =&gt; {
-        const caniuseData = data[k];
-//        console.log(Object.keys(caniuseData.stats).filter(b =&gt; browserMap[b]));
-  //      console.log(Object.keys(caniuseData.stats));
-        const stats = {};
-        Object.keys(caniuseData.stats).filter(browser =&gt; browserMap[browser]).forEach(browser =&gt; {
-          const support = getBrowserVersion(caniuseData.stats[browser], caniuseData.title, browser);
-          if (support.trim().length) stats[browserMap[browser]] = support;
-        })
-        return {
-          name:   k,
-          title:  caniuseData.title,
-          url:    `https://caniuse.com/#feat=${k}`,
-          description: caniuseData.description,
-          keywords: caniuseData.keywords,
-          stats: Object.keys(stats).map(key =&gt; `${key}: ${stats[key]}`).join(', '),
-        }
-      });
-      if (cacheArray.length) {
-        /* write cache data */
-        //      console.log(`updating cache data @ ${Path(localCache)}`);
-        const file = app.openForAccess(Path(localCache), {writePermission: true});
-        app.write(JSON.stringify(cacheArray), {to: file});
-        app.closeAccess(file);
-      }
-      return cacheArray;
+
+    if (
+      !modificationDate ||
+      Date.now() - modificationDate &gt;gt;= milliSecsPerDay * 7
+    ) {
+      return fetchData();
     } /* if local file is older than one week */ else {
-      const file = app.openForAccess(Path(localCache));
-      const cacheArray = JSON.parse(app.read(file));
-      app.closeAccess(file);
-      return cacheArray;
+      try {
+        const file = app.openForAccess(Path(localCache));
+        const cacheArray = JSON.parse(app.read(file));
+        app.closeAccess(file);
+        return cacheArray;
+      } catch (e) {
+        return fetchData();
+      }
     }
-  })()
+  })();
   /* Now 'cachedValues' contains the relevant JSON data */
   const result = findMatches(query, cachedValues);
-  const items = result.map(r =&gt; {
+  const items = result.map((r) =&gt;gt; {
     return {
       uid: r.title,
       arg: r.url,
-      title: `${r.title} [${r.stats}]`, 
+      title: `${r.title} [${r.stats}]`,
       subtitle: r.description,
-      icon: { path: 'icon.png'},
+      icon: { path: "icon.png" },
       /* add icon */
-    }
+    };
   }); /* items */
-  return JSON.stringify({items: (items.length ? 
-    items : 
-    [{ title: `No matches found for ${query}`}]) });
-}</string>
+  return JSON.stringify({
+    items: items.length ? items : [{ title: `No matches found for ${query}` }],
+  });
+}
+        </string>
 				<key>scriptargtype</key>
 				<integer>1</integer>
 				<key>scriptfile</key>
@@ -309,7 +342,7 @@ The code is modelled after an earlier version by Will Farrell (https://github.co
 	<key>userconfigurationconfig</key>
 	<array/>
 	<key>version</key>
-	<string>1.0</string>
+	<string>1.1</string>
 	<key>webaddress</key>
 	<string></string>
 </dict>
